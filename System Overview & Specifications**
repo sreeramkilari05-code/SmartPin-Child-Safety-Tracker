@@ -1,0 +1,59 @@
+System Overview & Specifications**
+
+Hardware Architecture
+
+Main Controller (ESP32 Gateway)**
+
+* ESP32 Development Board
+* RC522 RFID Reader module
+* Emergency SOS Push Button
+* Active Buzzer
+* Status Indicator LED
+
+Classroom Sub-Nodes**
+
+Node 1: ESP8266
+Node 2: ESP8266
+
+---
+
+Pin Configuration & Wiring
+
+RC522 RFID Reader $\rightarrow$ ESP32**
+
+| RC522 Pin | ESP32 GPIO | Description |
+| --- | --- | --- |
+| VCC | 3.3V | Power Supply (3.3V only) |
+| GND | GND | Ground |
+| RST | GPIO 22 | Reset Pin |
+| SDA (SS) | GPIO 5 | SPI Chip Select |
+| SCK | GPIO 18 | SPI Clock |
+| MISO | GPIO 19 | SPI Master In / Slave Out |
+| MOSI | GPIO 23 | SPI Master Out / Slave In |
+| IRQ | Not Connected | Interrupt Request (Unused) |
+
+Emergency Alert Subsystem $\rightarrow$ ESP32
+
+| Component | ESP32 GPIO | Configuration Type |
+| --- | --- | --- |
+| SOS Button | GPIO 27 | Digital Input (Pull-up / Pull-down) |
+| Active Buzzer | GPIO 26 | Digital Output |
+| Alert LED | GPIO 25 | Digital Output |
+
+---
+
+Software Stack & Protocols
+
+Development Environment: Arduino IDE
+Board Cores:
+* ESP32 Arduino Core
+* ESP8266 Arduino Core
+
+
+Libraries: `MFRC522` (by GithubCommunity / Miguel Balboa)
+Networking & Protocols:
+* Wi-Fi (802.11 b/g/n)
+* HTTP / REST Client-Server Communication
+
+
+Mobile Integration: Automate App (Android) for smartphone GPS logging and automated triggers

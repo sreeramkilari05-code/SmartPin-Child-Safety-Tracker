@@ -1,0 +1,1156 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <HTTPClient.h>
+#include <SPI.h>
+#include <MFRC522.h>
+
+// =====================================================
+// WIFI
+// =====================================================
+
+const char* ssid = "Pixel";
+const char* password = "123456789";
+
+
+// =====================================================
+// CLASSROOM ESP8266 NODES
+// =====================================================
+
+const char* node1IP = "10.141.215.160";
+const char* node2IP = "10.141.215.237";
+
+
+// =====================================================
+// ESP32 WEB SERVER
+// =====================================================
+
+WebServer server(80);
+
+
+// =====================================================
+// RFID RC522
+// =====================================================
+
+#define RFID_SS_PIN   5
+#define RFID_RST_PIN  22
+
+#define RFID_SCK      18
+#define RFID_MISO     19
+#define RFID_MOSI     23
+
+MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
+
+
+// =====================================================
+// SOS
+// =====================================================
+
+#define SOS_PIN       27
+#define BUZZER_PIN    26
+#define LED_PIN       25
+
+
+// =====================================================
+// STUDENT
+// =====================================================
+
+String studentID = "UNKNOWN";
+String studentName = "UNKNOWN";
+
+
+// =====================================================
+// GPS
+// =====================================================
+
+// GPS coordinates received from phone through Automate
+
+double latitude = 0.0;
+double longitude = 0.0;
+
+bool gpsAvailable = false;
+
+
+// =====================================================
+// SOS STATE
+// =====================================================
+
+bool emergency = false;
+
+bool alarmState = false;
+
+bool lastButtonState = HIGH;
+
+unsigned long lastAlarmChange = 0;
+
+const unsigned long ALARM_INTERVAL = 250;
+
+
+// =====================================================
+// CLASSROOM
+// =====================================================
+
+String currentClassroom = "UNKNOWN";
+
+unsigned long lastLocationCheck = 0;
+
+const unsigned long LOCATION_INTERVAL = 5000;
+
+
+// =====================================================
+// WIFI
+// =====================================================
+
+void connectWiFi() {
+
+  Serial.println();
+  Serial.println("======================================");
+  Serial.println("          WIFI CONNECTION");
+  Serial.println("======================================");
+
+  WiFi.mode(WIFI_STA);
+
+  WiFi.begin(
+    ssid,
+    password
+  );
+
+  Serial.print("Connecting");
+
+  int attempts = 0;
+
+  while (
+    WiFi.status() != WL_CONNECTED &&
+    attempts < 30
+  ) {
+
+    delay(500);
+
+    Serial.print(".");
+
+    attempts++;
+  }
+
+  Serial.println();
+  Serial.println();
+
+  if (
+    WiFi.status() == WL_CONNECTED
+  ) {
+
+    Serial.println("WiFi connected!");
+
+    // Print ESP32 IP
+
+    Serial.print("ESP32 IP Address: ");
+    Serial.println(WiFi.localIP());
+
+    Serial.print("WiFi RSSI: ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+
+  }
+
+  else {
+
+    Serial.println(
+      "WiFi connection FAILED"
+    );
+  }
+
+  Serial.println(
+    "======================================"
+  );
+}
+
+
+// =====================================================
+// GPS LOCATION ENDPOINT
+// =====================================================
+//
+// Automate sends:
+//
+// /location?lat=17.385044&lon=78.486671
+//
+// =====================================================
+
+void handleLocation() {
+
+  if (
+    !server.hasArg("lat") ||
+    !server.hasArg("lon")
+  ) {
+
+    server.send(
+      400,
+      "text/plain",
+      "ERROR: Missing lat or lon"
+    );
+
+    return;
+  }
+
+
+  String latString =
+    server.arg("lat");
+
+  String lonString =
+    server.arg("lon");
+
+
+  latitude =
+    latString.toDouble();
+
+  longitude =
+    lonString.toDouble();
+
+
+  gpsAvailable = true;
+
+
+  Serial.println();
+  Serial.println("======================================");
+  Serial.println("          GPS LOCATION RECEIVED");
+  Serial.println("======================================");
+
+
+  Serial.print("Latitude : ");
+  Serial.println(
+    latitude,
+    6
+  );
+
+
+  Serial.print("Longitude: ");
+  Serial.println(
+    longitude,
+    6
+  );
+
+
+  Serial.println(
+    "GPS status: AVAILABLE"
+  );
+
+
+  Serial.println(
+    "======================================");
+
+
+  server.send(
+    200,
+    "text/plain",
+    "GPS coordinates received"
+  );
+}
+
+
+// =====================================================
+// GPS STATUS
+// =====================================================
+//
+// Automate can also request:
+//
+// http://ESP32_IP/gps
+//
+// =====================================================
+
+void handleGPS() {
+
+  String response = "";
+
+
+  if (
+    gpsAvailable
+  ) {
+
+    response += "GPS=AVAILABLE\n";
+
+    response += "LAT=";
+
+    response += String(
+      latitude,
+      6
+    );
+
+    response += "\n";
+
+    response += "LON=";
+
+    response += String(
+      longitude,
+      6
+    );
+
+  }
+
+  else {
+
+    response =
+      "GPS=NOT_AVAILABLE\n";
+
+    response +=
+      "LAT=0.000000\n";
+
+    response +=
+      "LON=0.000000";
+  }
+
+
+  server.send(
+    200,
+    "text/plain",
+    response
+  );
+}
+
+
+// =====================================================
+// COMPLETE SMARTPIN INFORMATION
+// =====================================================
+
+void handleInfo() {
+
+  String response = "";
+
+
+  response += "SMARTPIN\n";
+
+  response += "STATUS=ONLINE\n";
+
+
+  response += "IP=";
+
+  response +=
+    WiFi.localIP().toString();
+
+  response += "\n";
+
+
+  response += "STUDENT_ID=";
+
+  response += studentID;
+
+  response += "\n";
+
+
+  response += "STUDENT_NAME=";
+
+  response += studentName;
+
+  response += "\n";
+
+
+  response += "CLASSROOM=";
+
+  response += currentClassroom;
+
+  response += "\n";
+
+
+  if (
+    gpsAvailable
+  ) {
+
+    response += "GPS=AVAILABLE\n";
+
+    response += "LAT=";
+
+    response += String(
+      latitude,
+      6
+    );
+
+    response += "\n";
+
+    response += "LON=";
+
+    response += String(
+      longitude,
+      6
+    );
+
+    response += "\n";
+
+  }
+
+  else {
+
+    response +=
+      "GPS=NOT_AVAILABLE\n";
+
+  }
+
+
+  response += "SOS=";
+
+  response +=
+    emergency ? "ACTIVE" : "NORMAL";
+
+
+  server.send(
+    200,
+    "text/plain",
+    response
+  );
+}
+
+
+// =====================================================
+// ROOT PAGE
+// =====================================================
+
+void handleRoot() {
+
+  String page = "";
+
+  page += "SMARTPIN ESP32\n";
+
+  page += "------------------------\n";
+
+
+  page += "IP: ";
+
+  page +=
+    WiFi.localIP().toString();
+
+
+  page += "\nStudent: ";
+
+  page += studentName;
+
+
+  page += "\nClassroom: ";
+
+  page += currentClassroom;
+
+
+  page += "\nGPS: ";
+
+  page +=
+    gpsAvailable ?
+    "AVAILABLE" :
+    "NOT AVAILABLE";
+
+
+  if (
+    gpsAvailable
+  ) {
+
+    page += "\nLatitude: ";
+
+    page += String(
+      latitude,
+      6
+    );
+
+    page += "\nLongitude: ";
+
+    page += String(
+      longitude,
+      6
+    );
+  }
+
+
+  page += "\nSOS: ";
+
+  page +=
+    emergency ?
+    "ACTIVE" :
+    "NORMAL";
+
+
+  server.send(
+    200,
+    "text/plain",
+    page
+  );
+}
+
+
+// =====================================================
+// START WEB SERVER
+// =====================================================
+
+void startWebServer() {
+
+  server.on(
+    "/",
+    handleRoot
+  );
+
+
+  server.on(
+    "/location",
+    handleLocation
+  );
+
+
+  server.on(
+    "/gps",
+    handleGPS
+  );
+
+
+  server.on(
+    "/info",
+    handleInfo
+  );
+
+
+  server.begin();
+
+
+  Serial.println();
+
+  Serial.println(
+    "ESP32 HTTP SERVER STARTED"
+  );
+
+
+  Serial.print(
+    "GPS endpoint: http://"
+  );
+
+  Serial.print(
+    WiFi.localIP()
+  );
+
+  Serial.println(
+    "/location"
+  );
+
+
+  Serial.print(
+    "GPS status: http://"
+  );
+
+  Serial.print(
+    WiFi.localIP()
+  );
+
+  Serial.println(
+    "/gps"
+  );
+
+
+  Serial.print(
+    "Full info: http://"
+  );
+
+  Serial.print(
+    WiFi.localIP()
+  );
+
+  Serial.println(
+    "/info"
+  );
+}
+
+
+// =====================================================
+// RFID
+// =====================================================
+
+void identifyStudent() {
+
+  String uid = "";
+
+
+  for (
+    byte i = 0;
+    i < rfid.uid.size;
+    i++
+  ) {
+
+    if (
+      rfid.uid.uidByte[i] < 0x10
+    ) {
+
+      uid += "0";
+    }
+
+
+    uid += String(
+      rfid.uid.uidByte[i],
+      HEX
+    );
+  }
+
+
+  uid.toUpperCase();
+
+
+  Serial.println();
+  Serial.println("======================================");
+
+  Serial.print(
+    "Card UID: "
+  );
+
+  Serial.println(uid);
+
+
+  // Student database
+
+  if (
+    uid == "B37E10FF"
+  ) {
+
+    studentID = "STU001";
+
+    studentName = "Sreeram";
+
+  }
+
+  else {
+
+    studentID = "UNKNOWN";
+
+    studentName = "Unknown Student";
+  }
+
+
+  Serial.println();
+
+  Serial.println(
+    "STUDENT INFORMATION"
+  );
+
+  Serial.println(
+    "--------------------------------------"
+  );
+
+
+  Serial.print(
+    "Student ID   : "
+  );
+
+  Serial.println(studentID);
+
+
+  Serial.print(
+    "Student Name : "
+  );
+
+  Serial.println(studentName);
+
+
+  Serial.print(
+    "Classroom    : "
+  );
+
+  Serial.println(
+    currentClassroom
+  );
+
+
+  if (
+    gpsAvailable
+  ) {
+
+    Serial.print(
+      "Latitude     : "
+    );
+
+    Serial.println(
+      latitude,
+      6
+    );
+
+
+    Serial.print(
+      "Longitude    : "
+    );
+
+    Serial.println(
+      longitude,
+      6
+    );
+  }
+
+
+  Serial.println(
+    "======================================"
+  );
+}
+
+
+// =====================================================
+// CLASSROOM NODE REQUEST
+// =====================================================
+
+String queryNode(
+  const char* ip
+) {
+
+  if (
+    WiFi.status() != WL_CONNECTED
+  ) {
+
+    return "";
+  }
+
+
+  HTTPClient http;
+
+
+  String url =
+    "http://" +
+    String(ip) +
+    "/classroom";
+
+
+  http.begin(url);
+
+  http.setTimeout(300);
+
+
+  int httpCode =
+    http.GET();
+
+
+  if (
+    httpCode == 200
+  ) {
+
+    String response =
+      http.getString();
+
+    http.end();
+
+    response.trim();
+
+    return response;
+  }
+
+
+  http.end();
+
+  return "";
+}
+
+
+// =====================================================
+// CLASSROOM LOCATION
+// =====================================================
+
+void checkClassroomLocation() {
+
+  if (
+    WiFi.status() != WL_CONNECTED
+  ) {
+
+    return;
+  }
+
+
+  String classroom1 =
+    queryNode(node1IP);
+
+
+  String classroom2 =
+    queryNode(node2IP);
+
+
+  if (
+    classroom1 != "" &&
+    classroom2 != ""
+  ) {
+
+    currentClassroom =
+      classroom1;
+
+  }
+
+  else if (
+    classroom1 != ""
+  ) {
+
+    currentClassroom =
+      classroom1;
+
+  }
+
+  else if (
+    classroom2 != ""
+  ) {
+
+    currentClassroom =
+      classroom2;
+
+  }
+
+  else {
+
+    currentClassroom =
+      "OUTSIDE / NO NODE";
+  }
+
+
+  Serial.println();
+
+  Serial.print(
+    "CURRENT CLASSROOM: "
+  );
+
+  Serial.println(
+    currentClassroom
+  );
+}
+
+
+// =====================================================
+// SOS
+// =====================================================
+
+void checkSOS() {
+
+  bool buttonState =
+    digitalRead(SOS_PIN);
+
+
+  // Detect button press
+
+  if (
+    buttonState == LOW &&
+    lastButtonState == HIGH
+  ) {
+
+    // Immediate response
+
+    digitalWrite(
+      LED_PIN,
+      HIGH
+    );
+
+    digitalWrite(
+      BUZZER_PIN,
+      HIGH
+    );
+
+
+    emergency = true;
+
+
+    Serial.println();
+    Serial.println(
+      "!!!!!!!!!!!!!!!!!!!!!!!!"
+    );
+
+    Serial.println(
+      "       SOS ACTIVATED"
+    );
+
+    Serial.println(
+      "!!!!!!!!!!!!!!!!!!!!!!!!"
+    );
+
+
+    Serial.print(
+      "Student: "
+    );
+
+    Serial.println(
+      studentName
+    );
+
+
+    Serial.print(
+      "Classroom: "
+    );
+
+    Serial.println(
+      currentClassroom
+    );
+
+
+    if (
+      gpsAvailable
+    ) {
+
+      Serial.print(
+        "Latitude: "
+      );
+
+      Serial.println(
+        latitude,
+        6
+      );
+
+
+      Serial.print(
+        "Longitude: "
+      );
+
+      Serial.println(
+        longitude,
+        6
+      );
+
+    }
+
+    else {
+
+      Serial.println(
+        "GPS: NOT AVAILABLE"
+      );
+    }
+  }
+
+
+  lastButtonState =
+    buttonState;
+}
+
+
+// =====================================================
+// SOS ALARM
+// =====================================================
+
+void handleEmergency() {
+
+  unsigned long now =
+    millis();
+
+
+  if (
+    now - lastAlarmChange >=
+    ALARM_INTERVAL
+  ) {
+
+    lastAlarmChange =
+      now;
+
+
+    alarmState =
+      !alarmState;
+
+
+    digitalWrite(
+      LED_PIN,
+      alarmState
+    );
+
+
+    digitalWrite(
+      BUZZER_PIN,
+      alarmState
+    );
+  }
+}
+
+
+// =====================================================
+// SETUP
+// =====================================================
+
+void setup() {
+
+  Serial.begin(115200);
+
+  delay(1000);
+
+
+  Serial.println();
+  Serial.println();
+  Serial.println(
+    "======================================"
+  );
+
+  Serial.println(
+    "          SMARTPIN SYSTEM"
+  );
+
+  Serial.println(
+    "======================================"
+  );
+
+
+  // SOS button
+
+  pinMode(
+    SOS_PIN,
+    INPUT_PULLUP
+  );
+
+
+  // Buzzer
+
+  pinMode(
+    BUZZER_PIN,
+    OUTPUT
+  );
+
+
+  // LED
+
+  pinMode(
+    LED_PIN,
+    OUTPUT
+  );
+
+
+  digitalWrite(
+    BUZZER_PIN,
+    LOW
+  );
+
+
+  digitalWrite(
+    LED_PIN,
+    LOW
+  );
+
+
+  // RFID
+
+  SPI.begin(
+    RFID_SCK,
+    RFID_MISO,
+    RFID_MOSI,
+    RFID_SS_PIN
+  );
+
+
+  rfid.PCD_Init();
+
+  delay(100);
+
+
+  // Wi-Fi
+
+  connectWiFi();
+
+
+  // Web server
+
+  if (
+    WiFi.status() == WL_CONNECTED
+  ) {
+
+    startWebServer();
+  }
+
+
+  Serial.println();
+
+  Serial.println(
+    "======================================"
+  );
+
+  Serial.println(
+    "             SYSTEM READY"
+  );
+
+  Serial.println(
+    "======================================"
+  );
+
+  Serial.println(
+    "RFID       : READY"
+  );
+
+  Serial.println(
+    "SOS        : READY"
+  );
+
+  Serial.println(
+    "BUZZER     : READY"
+  );
+
+  Serial.println(
+    "LED        : READY"
+  );
+
+  Serial.println(
+    "WiFi       : READY"
+  );
+
+  Serial.println(
+    "GPS        : PHONE + AUTOMATE"
+  );
+
+  Serial.println(
+    "CLASSROOM  : READY"
+  );
+
+  Serial.println(
+    "======================================"
+  );
+}
+
+
+// =====================================================
+// LOOP
+// =====================================================
+
+void loop() {
+
+  // -----------------------------------------------
+  // HTTP server
+  // -----------------------------------------------
+
+  server.handleClient();
+
+
+  // -----------------------------------------------
+  // HIGH PRIORITY SOS
+  // -----------------------------------------------
+
+  checkSOS();
+
+
+  if (
+    emergency
+  ) {
+
+    handleEmergency();
+  }
+
+
+  // -----------------------------------------------
+  // RFID
+  // -----------------------------------------------
+
+  if (
+    rfid.PICC_IsNewCardPresent()
+  ) {
+
+    if (
+      rfid.PICC_ReadCardSerial()
+    ) {
+
+      identifyStudent();
+
+
+      rfid.PICC_HaltA();
+
+      rfid.PCD_StopCrypto1();
+
+      delay(300);
+    }
+  }
+
+
+  // -----------------------------------------------
+  // CLASSROOM
+  // -----------------------------------------------
+
+  unsigned long currentTime =
+    millis();
+
+
+  if (
+    currentTime -
+    lastLocationCheck >=
+    LOCATION_INTERVAL
+  ) {
+
+    lastLocationCheck =
+      currentTime;
+
+
+    checkClassroomLocation();
+  }
+}

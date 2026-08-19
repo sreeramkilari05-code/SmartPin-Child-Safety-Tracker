@@ -1,0 +1,97 @@
+1. Student Identification
+The studett scans an RFID card.
+The ESP32 reads the UID and maps it to the corresponding student information.
+2. Classroom Detection
+
+ESP8266 nodes are installed as classroom/location nodes.
+
+The ESP32 periodically communicates with the nodes to determine the
+current classroom/location.
+
+3. GPS
+
+The prototype uses the smartphone as the GPS source.
+
+The smartphone obtains its GPS coordinates and sends them to the ESP32
+through Wi-Fi.
+
+The ESP32 provides an HTTP endpoint:
+
+/location
+
+Example:
+
+/location?lat=17.385044&lon=78.4866712. Classroom Detection
+
+ESP8266 nodes are installed as classroom/location nodes.
+
+The ESP32 periodically communicates with the nodes to determine the
+current classroom/location.
+
+3. GPS
+
+The prototype uses the smartphone as the GPS source.
+
+The smartphone obtains its GPS coordinates and sends them to the ESP32
+through Wi-Fi.
+
+The ESP32 provides an HTTP endpoint:
+
+/location
+
+Example:
+
+/location?lat=17.385044&lon=78.486671
+
+
+4. Emergency / SOS
+
+When the SOS button is pressed:
+
+LED is activated
+Buzzer is activated
+Student information is displayed
+Classroom information is displayed
+GPS information can be displayed
+
+Example:
+
+SOS ACTIVATED
+
+
+Student   : Sreeram
+Classroom : CLASSROOM_8A
+
+
+GPS LOCATION
+
+
+Latitude  : 17.385044
+Longitude : 78.486671
+ESP32 HTTP Endpoints
+Root
+/
+
+Displays the current SmartPin status.
+
+GPS
+/gps
+
+Returns the latest GPS information.
+
+Receive GPS
+/location?lat=<latitude>&lon=<longitude>
+
+Receives GPS coordinates from the smartphone.
+
+Complete System Information
+/info
+
+Returns:
+
+ESP32 IP
+Student ID
+Student name
+Classroom
+GPS status
+SOS status

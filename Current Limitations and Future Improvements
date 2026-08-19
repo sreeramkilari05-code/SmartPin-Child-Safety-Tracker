@@ -1,0 +1,25 @@
+Current Limitations
+
+This is a prototype and several components are simulated or simplified.
+
+Smartphone is currently used as the GPS source instead of a dedicated GPS
+module.
+Classroom positioning is demonstrated using ESP8266 nodes.
+Wi-Fi communication is used for the prototype.
+GPS coordinates shown in the current demonstration code may be test data.
+The system has not yet been packaged into a wearable enclosure.
+Power management and battery integration are not part of the current
+prototype.
+
+Future Improvements
+Dedicated GPS module
+Real-time cloud/server communication
+Parent notification system
+Mobile application
+Geofencing
+Better indoor positioning
+Battery-powered wearable hardware
+Low-power communication
+Secure communication
+Real-time location dashboard
+OTA firmware updates

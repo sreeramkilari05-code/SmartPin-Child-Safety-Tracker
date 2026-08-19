@@ -8,8 +8,8 @@
 // WIFI
 // =====================================================
 
-const char* ssid = "Pixel";
-const char* password = "123456789";
+const char* ssid = "YOUR SSID";
+const char* password = "YOUR SSID'S PASSWORD";
 
 
 // =====================================================
